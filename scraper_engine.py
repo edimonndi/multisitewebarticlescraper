@@ -334,7 +334,7 @@ class StoryScraper:
             return "Untitled Story"
         title = StoryScraper.clean_text(title)
         title = re.sub(
-            r"\s*[-|–—]\s*(America Focus|Fanstopis|LEVANEWS|Human Heart Tales|DAILY STORIES|Kaylestore|Lead to Happiness|1 Million Stories|Happy Soul Shop|Stories).*$",
+            r"\s*[-|–—]\s*(America Focus|Fanstopis|LEVANEWS|Human Heart Tales|DAILY STORIES|Kaylestore|Lead to Happiness|1 Million Stories|Happy Soul Shop|AmoMedia|Stories).*$",
             "",
             title,
             flags=re.IGNORECASE,
@@ -360,11 +360,26 @@ class StoryScraper:
         clean_title = self.clean_title(title)
 
         # 2. Locate Article Body Container
-        content_area = (
-            soup.find("div", class_=re.compile(r"(entry-content|post-content|article-content|story-content|elementor-widget-theme-post-content)"))
-            or soup.find("article")
-            or soup.find("main")
-        )
+        content_area = None
+
+        # Check main first if it has significant content or div.Cf / article body (e.g. AmoMedia)
+        main_tag = soup.find("main")
+        if main_tag and len(main_tag.find_all(["p", "h1", "h2", "h3"])) > 3:
+            cf = main_tag.find("div", class_=re.compile(r"(Cf|Df|entry-content|article-content|post-content|article__body)"))
+            content_area = cf or main_tag
+
+        if not content_area:
+            content_area = soup.find("div", class_=re.compile(r"(entry-content|post-content|article-content|story-content|elementor-widget-theme-post-content|article__body)"))
+
+        if not content_area:
+            for art in soup.find_all("article"):
+                if len(art.find_all("p")) > 3:
+                    content_area = art
+                    break
+
+        if not content_area:
+            content_area = soup.find("article") or soup.find("main") or soup.find("body")
+
         if not content_area:
             return clean_title, []
 
@@ -379,12 +394,13 @@ class StoryScraper:
             tag.decompose()
 
         # Safely decompose widgets without deleting parent wrappers
-        for tag in list(container.find_all(class_=re.compile(r"(banner|social-share|share-box|author-box|author-bio|widget-area|comments-area|nav-links|wp-block-buttons|disclaimer)", re.IGNORECASE))):
-            if len(tag.find_all(["p", "h2", "h3", "h4"])) < 4:
+        # (including AmoMedia pull-quotes .ch, ads .adv, .ad-container)
+        for tag in list(container.find_all(class_=re.compile(r"(banner|social-share|share-box|author-box|author-bio|widget-area|comments-area|nav-links|wp-block-buttons|disclaimer|adv\b|ad-container|\bch\b)", re.IGNORECASE))):
+            if len(tag.find_all(["p", "h1", "h2", "h3", "h4"])) < 4:
                 tag.decompose()
 
-        for tag in list(container.find_all(id=re.compile(r"(social-share|author-bio|comments|disclaimer)", re.IGNORECASE))):
-            if len(tag.find_all(["p", "h2", "h3", "h4"])) < 4:
+        for tag in list(container.find_all(id=re.compile(r"(social-share|author-bio|comments|disclaimer|adv|ad)", re.IGNORECASE))):
+            if len(tag.find_all(["p", "h1", "h2", "h3", "h4"])) < 4:
                 tag.decompose()
 
         # Extract Paragraphs, Quotes, Lists, and Section Headings in exact document order
@@ -404,6 +420,10 @@ class StoryScraper:
 
             # Skip if heading is an exact duplicate of the main title
             if txt.lower() == clean_title.lower():
+                continue
+
+            # Skip URL share strings
+            if txt.startswith("http://") or txt.startswith("https://"):
                 continue
 
             # Discard short pagination/nav fragments
@@ -429,7 +449,11 @@ class StoryScraper:
     def fetch_page(self, url: str) -> Tuple[Optional[BeautifulSoup], str, int]:
         try:
             res = self.session.get(url, timeout=14, allow_redirects=True)
-            res.encoding = res.apparent_encoding or "utf-8"
+            if res.encoding is None or res.encoding.lower() in ["iso-8859-1", "windows-1252"]:
+                res.encoding = "utf-8"
+            else:
+                res.encoding = res.apparent_encoding or "utf-8"
+
             if res.status_code != 200:
                 return None, res.url, res.status_code
             soup = BeautifulSoup(res.text, "html.parser")
@@ -439,7 +463,11 @@ class StoryScraper:
             try:
                 fresh_session = create_resilient_session()
                 res = fresh_session.get(url, timeout=14, allow_redirects=True)
-                res.encoding = res.apparent_encoding or "utf-8"
+                if res.encoding is None or res.encoding.lower() in ["iso-8859-1", "windows-1252"]:
+                    res.encoding = "utf-8"
+                else:
+                    res.encoding = res.apparent_encoding or "utf-8"
+
                 if res.status_code != 200:
                     return None, res.url, res.status_code
                 soup = BeautifulSoup(res.text, "html.parser")

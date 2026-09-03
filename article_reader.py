@@ -452,6 +452,7 @@ class StoryScraperApp(ctk.CTk):
                 "Kayle Store (1 Part)",
                 "Lead to Happiness (1 Part)",
                 "Happy Soul Shop (1 Part)",
+                "AmoMedia (1 Part)",
             ],
             command=self._load_preset_url,
             width=195,
@@ -762,6 +763,7 @@ class StoryScraperApp(ctk.CTk):
             "Kayle Store (1 Part)": "https://kaylestore.net/my-husband-reserved-seats-7a-and-7b-to-escape-with-another-woman-but-he-forgot-that-after-12-years-i-knew-every-one-of-his-lies/",
             "Lead to Happiness (1 Part)": "https://leadtohappiness.com/stay-with-the-doctors-im-choosing-her-my-husband-left-me-bl%f0%9f%87%aaeding-in-the-er-to-chase-his-mistress-then-he-returned-to-an-empty-bay-and-learned-th/",
             "Happy Soul Shop (1 Part)": "https://happysoulshop.com/we-adopted-a-girl-in-a-wheelchair-but-her-first-words-about-our-basement-left-us-frozen/",
+            "AmoMedia (1 Part)": "https://amomedia.com/661995-my-fiancee-kept-assuring-me-that-she.html",
         }
         if choice in presets:
             self.url_entry.delete(0, "end")
