@@ -393,19 +393,21 @@ class StoryScraper:
         ]):
             tag.decompose()
 
-        # Safely decompose widgets without deleting parent wrappers
-        # (including AmoMedia pull-quotes .ch, ads .adv, .ad-container)
-        for tag in list(container.find_all(class_=re.compile(r"(banner|social-share|share-box|author-box|author-bio|widget-area|comments-area|nav-links|wp-block-buttons|disclaimer|adv\b|ad-container|\bch\b)", re.IGNORECASE))):
-            if len(tag.find_all(["p", "h1", "h2", "h3", "h4"])) < 4:
+        # Safely decompose ads and social share widgets without deleting story blocks/blockquotes
+        for tag in list(container.find_all(class_=re.compile(r"(banner|social-share|share-box|author-box|author-bio|widget-area|comments-area|nav-links|wp-block-buttons|disclaimer|adv\b|ad-container|ad_container|ad-wrapper)", re.IGNORECASE))):
+            if not tag.find_all(["p", "h1", "h2", "h3", "h4", "blockquote"]):
+                tag.decompose()
+            elif "adv" in str(tag.get("class", [])).lower() and "advertisement" in tag.get_text().lower() and len(tag.get_text(strip=True)) < 30:
                 tag.decompose()
 
         for tag in list(container.find_all(id=re.compile(r"(social-share|author-bio|comments|disclaimer|adv|ad)", re.IGNORECASE))):
-            if len(tag.find_all(["p", "h1", "h2", "h3", "h4"])) < 4:
+            if not tag.find_all(["p", "h1", "h2", "h3", "h4", "blockquote"]):
                 tag.decompose()
 
         # Extract Paragraphs, Quotes, Lists, and Section Headings in exact document order
         paragraphs = []
         target_tags = ["h1", "h2", "h3", "h4", "h5", "h6", "p", "blockquote", "pre", "li"]
+        seen_texts = set()
 
         for el in container.find_all(target_tags):
             # Skip parent container if it has child target tags to prevent duplicate text
@@ -441,6 +443,12 @@ class StoryScraper:
                 continue
             if "press nex part in bottom of page" in lower or "press next part in bottom of page" in lower:
                 continue
+
+            # Smart duplicate check for repeated magazine pull-quotes
+            norm_txt = re.sub(r"\s+", " ", txt.strip().lower())
+            if norm_txt in seen_texts:
+                continue
+            seen_texts.add(norm_txt)
 
             paragraphs.append(txt)
 
