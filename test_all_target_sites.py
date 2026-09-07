@@ -13,6 +13,8 @@ test_urls = [
     ("1 Million Stories (3 parts)", "https://1millionstories.net/minutes-before-my-brain-surgery-my-husband-leaned-close-and-admitted-your-friend-and-i-have-a-nine-year-old-daughter-he-was-counting-on-the-operation-erasing-my-memory-a/"),
     ("Happy Soul Shop (1 part)", "https://happysoulshop.com/we-adopted-a-girl-in-a-wheelchair-but-her-first-words-about-our-basement-left-us-frozen/"),
     ("AmoMedia (1 part)", "https://amomedia.com/661995-my-fiancee-kept-assuring-me-that-she.html"),
+    ("Aliacar News (1 part)", "https://aliacar.net.tr/husbands-with-these-2-bad-habits-may-put-their-wives-at-higher-risk-of-breast-cancer-stop-them-now-before-they-harm-the-whole-family/"),
+    ("The Celebritist (1 part)", "https://thecelebritist.com/i-lost-my-daughter-last-year-five/"),
 ]
 
 scraper = StoryScraper()

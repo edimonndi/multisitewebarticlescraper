@@ -334,7 +334,7 @@ class StoryScraper:
             return "Untitled Story"
         title = StoryScraper.clean_text(title)
         title = re.sub(
-            r"\s*[-|–—]\s*(America Focus|Fanstopis|LEVANEWS|Human Heart Tales|DAILY STORIES|Kaylestore|Lead to Happiness|1 Million Stories|Happy Soul Shop|AmoMedia|Stories).*$",
+            r"\s*[-|–—]\s*(America Focus|Fanstopis|LEVANEWS|Human Heart Tales|DAILY STORIES|Kaylestore|Lead to Happiness|1 Million Stories|Happy Soul Shop|AmoMedia|Alu News|Aliacar|The Celebritist|Celebritist|Stories).*$",
             "",
             title,
             flags=re.IGNORECASE,
@@ -362,10 +362,10 @@ class StoryScraper:
         # 2. Locate Article Body Container
         content_area = None
 
-        # Check main first if it has significant content or div.Cf / article body (e.g. AmoMedia)
+        # Check main first if it has significant content or div.Cf / div.Uc / article body (e.g. AmoMedia, The Celebritist)
         main_tag = soup.find("main")
         if main_tag and len(main_tag.find_all(["p", "h1", "h2", "h3"])) > 3:
-            cf = main_tag.find("div", class_=re.compile(r"(Cf|Df|entry-content|article-content|post-content|article__body)"))
+            cf = main_tag.find("div", class_=re.compile(r"(Cf|Df|Uc|entry-content|article-content|post-content|article__body)"))
             content_area = cf or main_tag
 
         if not content_area:
@@ -394,15 +394,28 @@ class StoryScraper:
             tag.decompose()
 
         # Safely decompose ads and social share widgets without deleting story blocks/blockquotes
-        for tag in list(container.find_all(class_=re.compile(r"(banner|social-share|share-box|author-box|author-bio|widget-area|comments-area|nav-links|wp-block-buttons|disclaimer|adv\b|ad-container|ad_container|ad-wrapper)", re.IGNORECASE))):
+        for tag in list(container.find_all(class_=re.compile(r"(banner|social-share|share-box|author-box|author-bio|widget-area|comments-area|nav-links|wp-block-buttons|disclaimer|adv\b|ad-container|ad_container|ad-wrapper|carousel|snap-container)", re.IGNORECASE))):
             if not tag.find_all(["p", "h1", "h2", "h3", "h4", "blockquote"]):
                 tag.decompose()
             elif "adv" in str(tag.get("class", [])).lower() and "advertisement" in tag.get_text().lower() and len(tag.get_text(strip=True)) < 30:
+                tag.decompose()
+            elif any(k in str(tag.get("class", [])).lower() for k in ["carousel", "snap-container", "post-list"]):
                 tag.decompose()
 
         for tag in list(container.find_all(id=re.compile(r"(social-share|author-bio|comments|disclaimer|adv|ad)", re.IGNORECASE))):
             if not tag.find_all(["p", "h1", "h2", "h3", "h4", "blockquote"]):
                 tag.decompose()
+
+        # Decompose nested recommendation cards / related story blocks
+        for tag in list(container.find_all(["section", "article"])):
+            if any(k in tag.get_text().lower()[:60] for k in ["read also", "read next", "recommended", "more stories", "trending stories"]):
+                tag.decompose()
+            elif tag.name == "article":
+                tag.decompose()
+
+        # Decompose styled duplicate pullquote badges (e.g. blockquote.bh on The Celebritist)
+        for bq in list(container.find_all("blockquote", class_=re.compile(r"\bbh\b"))):
+            bq.decompose()
 
         # Extract Paragraphs, Quotes, Lists, and Section Headings in exact document order
         paragraphs = []

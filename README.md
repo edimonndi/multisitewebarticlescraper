@@ -42,6 +42,9 @@ It features a built-in **Google AdSense & AdsKeeper Policy Safety Auditor**, sep
 - **Lead to Happiness (`leadtohappiness.com`)**: Single-part stories.
 - **Top Thuy Sinh (`tv.topthuysinh.com`)**: Single-part stories.
 - **Happy Soul Shop (`happysoulshop.com`)**: Single-part stories.
+- **AmoMedia (`amomedia.com`)**: Single-part magazine layout with blockquote/dialogue preservation.
+- **Aliacar News (`aliacar.net.tr`)**: Single-part long-form stories and news articles.
+- **The Celebritist (`thecelebritist.com`)**: Next.js long-form magazine layout with clean dialogue extraction, carousel filtering, and duplicate pullquote elimination.
 - **Universal Fallback**: Detects query, slash, or link-based pagination across any standard WordPress or news blog.
 
 ### 4. 🎨 Modern Windows UI & Reader Controls
