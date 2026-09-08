@@ -7,7 +7,7 @@ from typing import Optional
 
 import streamlit as st
 
-from adsense_analyzer import AdSensePolicyAnalyzer, PolicyAnalysisResult
+from adsense_analyzer import AdSensePolicyAnalyzer, PolicyAnalysisResult, POLICY_RULES
 from scraper_engine import StoryArticle, StoryPart, StoryScraper, clean_pure_text
 
 # Set Page Config
@@ -286,8 +286,10 @@ if st.session_state.article and st.session_state.cleaned_body:
                 st.markdown("#### Detected Sensitive Terms & Context:")
                 for flag in res.flags:
                     sev_badge = "🔴 HIGH" if flag.severity == "HIGH" else ("🟡 MEDIUM" if flag.severity == "MEDIUM" else "🔵 LOW")
-                    st.markdown(f"**`{flag.word_or_phrase}`** ({sev_badge} · *{flag.rule_label}*) — {flag.count} occurrence(s)")
-                    st.caption(f"_{flag.description}_")
+                    desc = POLICY_RULES.get(flag.category, {}).get("description", "")
+                    st.markdown(f"**`{flag.word_or_phrase}`** ({sev_badge} · *{flag.category_label}*) — {flag.match_count} occurrence(s)")
+                    if desc:
+                        st.caption(f"_{desc}_")
                     for snip in flag.context_snippets:
                         st.markdown(f"> *\"{snip}\"*")
             else:
