@@ -1,11 +1,13 @@
 import html
 import io
+import json
 import os
 import re
 import time
 from typing import Optional
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 from adsense_analyzer import AdSensePolicyAnalyzer, PolicyAnalysisResult, POLICY_RULES
 from scraper_engine import StoryArticle, StoryPart, StoryScraper, clean_pure_text
@@ -17,6 +19,78 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+
+def render_copy_button(text_to_copy: str, button_label: str = "📋 Copy", success_label: str = "✓ Copied!", key: str = "copy_btn", bg_color: str = "#2563eb"):
+    """Renders a 1-click browser clipboard copy button with visual feedback."""
+    escaped_json = json.dumps(text_to_copy)
+    html_code = f"""
+    <div style="margin: 0; padding: 0; width: 100%;">
+        <button id="{key}" onclick="copyText_{key}()" style="
+            width: 100%;
+            background-color: {bg_color};
+            color: #ffffff;
+            border: none;
+            border-radius: 8px;
+            padding: 8px 14px;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            text-align: center;
+        ">
+            {button_label}
+        </button>
+        <script>
+            function copyText_{key}() {{
+                var text = {escaped_json};
+                if (navigator.clipboard && window.isSecureContext) {{
+                    navigator.clipboard.writeText(text).then(function() {{
+                        showCopied_{key}();
+                    }}, function() {{
+                        fallbackCopy_{key}(text);
+                    }});
+                }} else {{
+                    fallbackCopy_{key}(text);
+                }}
+            }}
+            function fallbackCopy_{key}(text) {{
+                var textArea = document.createElement("textarea");
+                textArea.value = text;
+                textArea.style.position = "fixed";
+                textArea.style.left = "-999999px";
+                textArea.style.top = "-999999px";
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+                try {{
+                    document.execCommand('copy');
+                    showCopied_{key}();
+                }} catch (err) {{
+                    console.error('Copy failed', err);
+                }}
+                document.body.removeChild(textArea);
+            }}
+            function showCopied_{key}() {{
+                var btn = document.getElementById("{key}");
+                if (btn) {{
+                    var orig = btn.innerHTML;
+                    var origBg = btn.style.backgroundColor;
+                    btn.innerHTML = "{success_label}";
+                    btn.style.backgroundColor = "#10b981";
+                    setTimeout(function() {{
+                        btn.innerHTML = orig;
+                        btn.style.backgroundColor = origBg;
+                    }}, 2200);
+                }}
+            }}
+        </script>
+    </div>
+    """
+    components.html(html_code, height=44)
+
 
 # Custom CSS for modern UI design and reader aesthetics
 st.markdown("""
@@ -297,13 +371,17 @@ if st.session_state.article and st.session_state.cleaned_body:
 
     # 3. Editable Title Section
     st.markdown("### 📌 Article Title")
-    new_title = st.text_input("Title:", value=st.session_state.edited_title or art.title, label_visibility="collapsed")
-    if new_title != st.session_state.edited_title:
-        st.session_state.edited_title = new_title
-        art.title = new_title
+    col_t1, col_t2 = st.columns([5, 2])
+    with col_t1:
+        new_title = st.text_input("Title:", value=st.session_state.edited_title or art.title, label_visibility="collapsed")
+        if new_title != st.session_state.edited_title:
+            st.session_state.edited_title = new_title
+            art.title = new_title
+    with col_t2:
+        render_copy_button(st.session_state.edited_title or art.title, button_label="📋 Copy Title", success_label="✓ Title Copied!", key="btn_copy_title", bg_color="#2563eb")
 
     # 4. Clean Story Body & Actions
-    col_hdr, col_acts = st.columns([3, 2])
+    col_hdr, col_acts = st.columns([3, 3])
     with col_hdr:
         st.markdown("### 📖 Clean Article Body")
     with col_acts:
@@ -313,9 +391,10 @@ if st.session_state.article and st.session_state.cleaned_body:
                 cleaned = clean_pure_text(st.session_state.cleaned_body)
                 cleaned = StoryScraper.clean_text(cleaned)
                 st.session_state.cleaned_body = cleaned
+                st.toast("✨ Story body cleaned and formatted!", icon="🧹")
                 st.rerun()
         with b2:
-            st.button("📋 Ready to Copy", use_container_width=True, help="Select and copy text directly from the reader box below.")
+            render_copy_button(st.session_state.cleaned_body, button_label="📋 Copy Article", success_label="✓ Article Copied!", key="btn_copy_article", bg_color="#059669")
 
     # Reader Content Box
     st.markdown(
