@@ -1,4 +1,5 @@
 import ctypes
+import json
 import os
 import sys
 import threading
@@ -10,7 +11,7 @@ from typing import Optional
 import customtkinter as ctk
 
 from adsense_analyzer import AdSensePolicyAnalyzer, PolicyAnalysisResult
-from scraper_engine import StoryArticle, StoryScraper, clean_pure_text
+from scraper_engine import StoryArticle, StoryPart, StoryScraper, clean_pure_text
 
 # Enable Windows DPI awareness & Taskbar Icon grouping
 try:
@@ -32,6 +33,43 @@ def get_resource_path(relative_path: str) -> str:
     except Exception:
         base_path = os.path.dirname(os.path.abspath(__file__))
     return os.path.join(base_path, relative_path)
+
+
+def get_settings_file_path() -> str:
+    """Get absolute path to scraper settings file in application directory."""
+    if getattr(sys, "frozen", False):
+        base_dir = os.path.dirname(sys.executable)
+    else:
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(base_dir, "scraper_settings.json")
+
+
+def load_app_settings() -> dict:
+    """Load proxy & app configuration from scraper_settings.json."""
+    default_settings = {
+        "proxy_enabled": False,
+        "proxy_url": ""
+    }
+    settings_file = get_settings_file_path()
+    if os.path.exists(settings_file):
+        try:
+            with open(settings_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, dict):
+                    default_settings.update(data)
+        except Exception:
+            pass
+    return default_settings
+
+
+def save_app_settings(settings: dict) -> None:
+    """Save proxy & app configuration to scraper_settings.json."""
+    settings_file = get_settings_file_path()
+    try:
+        with open(settings_file, "w", encoding="utf-8") as f:
+            json.dump(settings, f, indent=2)
+    except Exception:
+        pass
 
 
 class PolicyReportDialog(ctk.CTkToplevel):
@@ -222,6 +260,220 @@ class PolicyReportDialog(ctk.CTkToplevel):
             self.on_highlight_word(word)
 
 
+class ProxySettingsDialog(ctk.CTkToplevel):
+    """Network & Proxy Configuration Dialog for bypassing Geo-blocking and Firewalls."""
+
+    def __init__(self, parent, current_settings: dict, on_save_callback=None):
+        super().__init__(parent)
+
+        self.title("🌐 Proxy & Network Settings — DEA Pro")
+        self.geometry("620x520")
+        self.minsize(540, 450)
+        self.transient(parent)
+
+        icon_path = get_resource_path("app_icon.ico")
+        if os.path.exists(icon_path):
+            try:
+                self.iconbitmap(icon_path)
+            except Exception:
+                pass
+
+        self.current_settings = dict(current_settings)
+        self.on_save_callback = on_save_callback
+
+        self._build_ui()
+        self.focus_force()
+
+    def _build_ui(self):
+        # 1. Header Card
+        header_card = ctk.CTkFrame(self, fg_color=("#f1f5f9", "#1e293b"), corner_radius=12, border_width=1, border_color=("#e2e8f0", "#334155"))
+        header_card.pack(fill="x", padx=20, pady=(16, 10))
+
+        header_box = ctk.CTkFrame(header_card, fg_color="transparent")
+        header_box.pack(fill="x", padx=16, pady=12)
+
+        ctk.CTkLabel(
+            header_box,
+            text="🌐 Proxy & Geo-Unblock Settings",
+            font=ctk.CTkFont(family="Segoe UI", size=17, weight="bold"),
+            text_color=("#2563eb", "#38bdf8")
+        ).pack(anchor="w")
+
+        ctk.CTkLabel(
+            header_box,
+            text="Route scraping requests through an HTTP/HTTPS or SOCKS5 proxy to bypass regional country blocks, ISP timeouts, and server-side firewall filters (e.g. Levanews, Celebritist).",
+            font=ctk.CTkFont(size=12),
+            text_color=("#64748b", "#94a3b8"),
+            wraplength=540,
+            justify="left"
+        ).pack(anchor="w", pady=(4, 0))
+
+        # 2. Main Config Card
+        config_card = ctk.CTkFrame(self, fg_color=("#ffffff", "#1e293b"), corner_radius=12, border_width=1, border_color=("#e2e8f0", "#334155"))
+        config_card.pack(fill="both", expand=True, padx=20, pady=(0, 14))
+
+        content_box = ctk.CTkFrame(config_card, fg_color="transparent")
+        content_box.pack(fill="both", expand=True, padx=16, pady=14)
+
+        # Proxy Toggle Switch
+        self.enable_proxy_var = ctk.BooleanVar(value=bool(self.current_settings.get("proxy_enabled", False)))
+        self.enable_switch = ctk.CTkSwitch(
+            content_box,
+            text="Enable Proxy Routing for all Scraper Requests",
+            variable=self.enable_proxy_var,
+            font=ctk.CTkFont(size=13, weight="bold"),
+            progress_color=("#10b981", "#059669")
+        )
+        self.enable_switch.pack(anchor="w", pady=(0, 14))
+
+        # Proxy URL Input
+        ctk.CTkLabel(
+            content_box,
+            text="Proxy Address / URL:",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            text_color=("#334155", "#cbd5e1")
+        ).pack(anchor="w", pady=(0, 4))
+
+        self.proxy_entry = ctk.CTkEntry(
+            content_box,
+            placeholder_text="e.g. http://127.0.0.1:8080 or socks5://127.0.0.1:1080",
+            height=38,
+            font=ctk.CTkFont(size=13),
+            corner_radius=8,
+            border_width=1,
+            border_color=("#cbd5e1", "#475569")
+        )
+        self.proxy_entry.pack(fill="x", pady=(0, 8))
+        saved_proxy = self.current_settings.get("proxy_url", "")
+        if saved_proxy:
+            self.proxy_entry.insert(0, saved_proxy)
+
+        # Formats hint
+        hint_text = (
+            "Supported formats:\n"
+            "• HTTP / HTTPS:  http://proxy-host:8080\n"
+            "• Authenticated:  http://username:password@proxy-host:8080\n"
+            "• SOCKS5 Proxy:  socks5://127.0.0.1:1080 (or socks5h://...)"
+        )
+        hint_box = ctk.CTkFrame(content_box, fg_color=("#f1f5f9", "#0f172a"), corner_radius=8)
+        hint_box.pack(fill="x", pady=(0, 14))
+        ctk.CTkLabel(
+            hint_box,
+            text=hint_text,
+            font=ctk.CTkFont(family="Consolas", size=11),
+            text_color=("#475569", "#94a3b8"),
+            justify="left"
+        ).pack(anchor="w", padx=12, pady=8)
+
+        # Test Connection Row
+        test_row = ctk.CTkFrame(content_box, fg_color="transparent")
+        test_row.pack(fill="x", pady=(0, 4))
+
+        self.test_btn = ctk.CTkButton(
+            test_row,
+            text="🧪 Test Connection",
+            width=140,
+            height=32,
+            font=ctk.CTkFont(size=12, weight="bold"),
+            fg_color=("#3b82f6", "#2563eb"),
+            hover_color=("#2563eb", "#1d4ed8"),
+            corner_radius=6,
+            command=self._start_test_proxy
+        )
+        self.test_btn.pack(side="left", padx=(0, 10))
+
+        self.test_status_label = ctk.CTkLabel(
+            test_row,
+            text="Status: Not tested",
+            font=ctk.CTkFont(size=11),
+            text_color=("#64748b", "#94a3b8")
+        )
+        self.test_status_label.pack(side="left", fill="x", expand=True)
+
+        # Action Buttons (Save & Cancel)
+        btn_row = ctk.CTkFrame(self, fg_color="transparent")
+        btn_row.pack(fill="x", padx=20, pady=(0, 16))
+
+        cancel_btn = ctk.CTkButton(
+            btn_row,
+            text="Cancel",
+            width=90,
+            height=34,
+            font=ctk.CTkFont(size=12),
+            fg_color=("#cbd5e1", "#334155"),
+            text_color=("#0f172a", "#f8fafc"),
+            hover_color=("#94a3b8", "#475569"),
+            corner_radius=8,
+            command=self.destroy
+        )
+        cancel_btn.pack(side="right", padx=(8, 0))
+
+        save_btn = ctk.CTkButton(
+            btn_row,
+            text="💾 Save & Apply",
+            width=130,
+            height=34,
+            font=ctk.CTkFont(size=13, weight="bold"),
+            fg_color=("#10b981", "#059669"),
+            hover_color=("#059669", "#047857"),
+            corner_radius=8,
+            command=self._save_settings
+        )
+        save_btn.pack(side="right")
+
+    def _start_test_proxy(self):
+        proxy_val = self.proxy_entry.get().strip()
+        if not proxy_val:
+            self.test_status_label.configure(
+                text="❌ Please enter a proxy URL to test.",
+                text_color=("#dc2626", "#ef4444")
+            )
+            return
+
+        self.test_btn.configure(state="disabled", text="Testing...")
+        self.test_status_label.configure(
+            text="⏳ Connecting through proxy...",
+            text_color=("#2563eb", "#38bdf8")
+        )
+
+        def test_worker():
+            success, msg = StoryScraper.test_proxy_connection(proxy_val)
+            self.after(0, self._on_test_complete, success, msg)
+
+        threading.Thread(target=test_worker, daemon=True).start()
+
+    def _on_test_complete(self, success: bool, msg: str):
+        self.test_btn.configure(state="normal", text="🧪 Test Connection")
+        if success:
+            self.test_status_label.configure(
+                text=f"✅ {msg}",
+                text_color=("#10b981", "#34d399")
+            )
+        else:
+            self.test_status_label.configure(
+                text=f"❌ {msg}",
+                text_color=("#dc2626", "#ef4444")
+            )
+
+    def _save_settings(self):
+        enabled = self.enable_proxy_var.get()
+        proxy_url = self.proxy_entry.get().strip()
+        if enabled and not proxy_url:
+            messagebox.showwarning(
+                "Proxy Enabled",
+                "Proxy routing is enabled, but no Proxy URL was entered. Please enter a proxy URL or disable the switch."
+            )
+            return
+
+        new_settings = {
+            "proxy_enabled": enabled,
+            "proxy_url": proxy_url
+        }
+        if self.on_save_callback:
+            self.on_save_callback(new_settings)
+        self.destroy()
+
+
 class StoryScraperApp(ctk.CTk):
     def __init__(self):
         super().__init__()
@@ -237,6 +489,9 @@ class StoryScraperApp(ctk.CTk):
                 self.iconbitmap(icon_path)
             except Exception:
                 pass
+
+        # Load Persisted Settings
+        self.app_settings = load_app_settings()
 
         # Engines State
         self.policy_analyzer = AdSensePolicyAnalyzer()
@@ -294,7 +549,7 @@ class StoryScraperApp(ctk.CTk):
         )
         badge.pack(side="left")
 
-        # Controls (Theme + Font Adjustments)
+        # Controls (Theme + Font Adjustments + Proxy)
         ctrl_box = ctk.CTkFrame(header_frame, fg_color="transparent")
         ctrl_box.pack(side="right")
 
@@ -334,6 +589,21 @@ class StoryScraperApp(ctk.CTk):
         )
         btn_font_inc.pack(side="left", padx=(2, 6), pady=3)
 
+        self.proxy_btn = ctk.CTkButton(
+            ctrl_box,
+            text="🌐 Proxy: OFF",
+            width=98,
+            height=28,
+            font=ctk.CTkFont(size=12, weight="bold"),
+            fg_color=("#e2e8f0", "#1e293b"),
+            text_color=("#64748b", "#94a3b8"),
+            hover_color=("#cbd5e1", "#334155"),
+            corner_radius=8,
+            command=self.open_proxy_settings,
+        )
+        self.proxy_btn.pack(side="left", padx=(0, 6))
+        self._update_proxy_ui()
+
         self.theme_btn = ctk.CTkButton(
             ctrl_box,
             text="☀️ Light",
@@ -347,6 +617,42 @@ class StoryScraperApp(ctk.CTk):
             command=self._toggle_theme,
         )
         self.theme_btn.pack(side="left")
+
+    def _update_proxy_ui(self):
+        enabled = self.app_settings.get("proxy_enabled", False)
+        proxy_url = self.app_settings.get("proxy_url", "").strip()
+        if enabled and proxy_url:
+            self.proxy_btn.configure(
+                text="🌐 Proxy: ON",
+                fg_color=("#10b981", "#059669"),
+                text_color="#ffffff",
+                hover_color=("#059669", "#047857")
+            )
+        else:
+            self.proxy_btn.configure(
+                text="🌐 Proxy: OFF",
+                fg_color=("#e2e8f0", "#1e293b"),
+                text_color=("#64748b", "#94a3b8"),
+                hover_color=("#cbd5e1", "#334155")
+            )
+
+    def open_proxy_settings(self):
+        def on_save(new_settings: dict):
+            self.app_settings.update(new_settings)
+            save_app_settings(self.app_settings)
+            self._update_proxy_ui()
+            if self.app_settings.get("proxy_enabled") and self.app_settings.get("proxy_url"):
+                self.status_label.configure(
+                    text=f"🌐 Proxy routing active: {self.app_settings.get('proxy_url')}",
+                    text_color=("#10b981", "#34d399")
+                )
+            else:
+                self.status_label.configure(
+                    text="🌐 Proxy routing disabled (direct connections).",
+                    text_color=("#64748b", "#94a3b8")
+                )
+
+        ProxySettingsDialog(self, self.app_settings, on_save_callback=on_save)
 
     def _create_input_card(self):
         card = ctk.CTkFrame(self, fg_color=("#f1f5f9", "#1e293b"), corner_radius=12, border_width=1, border_color=("#e2e8f0", "#334155"))
@@ -810,7 +1116,8 @@ class StoryScraperApp(ctk.CTk):
 
     def _scrape_worker(self, url: str):
         start_time = time.time()
-        scraper = StoryScraper()
+        proxy_url = self.app_settings.get("proxy_url") if self.app_settings.get("proxy_enabled") else None
+        scraper = StoryScraper(proxy=proxy_url)
 
         def progress_cb(msg: str, part_num: int, total_est: int, pct: float):
             self.after(0, self._update_progress, msg, part_num, total_est, pct)
@@ -880,6 +1187,11 @@ class StoryScraperApp(ctk.CTk):
         )
         self.status_label.configure(text=f"❌ Error: {err_msg}", text_color=("#dc2626", "#f87171"))
         self.text_area.delete("1.0", "end")
+
+        suggestion_proxy = ""
+        if "timeout" in err_msg.lower() or "connection" in err_msg.lower() or "403" in err_msg.lower() or "404" in err_msg.lower():
+            suggestion_proxy = "\n• If this website blocks your country/IP (e.g. Levanews), configure a proxy via '🌐 Proxy' in the header."
+
         self.text_area.insert(
             "1.0",
             f"⚠️ Could not load story\n"
@@ -887,7 +1199,7 @@ class StoryScraperApp(ctk.CTk):
             f"Details: {err_msg}\n\n"
             f"Suggestions:\n"
             f"• Verify the entire URL was copied (some URLs get cut off on social media).\n"
-            f"• Check that your internet connection is active and the website is reachable."
+            f"• Check that your internet connection is active and the website is reachable.{suggestion_proxy}"
         )
 
     def _run_policy_analysis(self, title: str, body: str):
@@ -986,22 +1298,44 @@ class StoryScraperApp(ctk.CTk):
         self.after(1800, lambda: self.copy_article_btn.configure(text=prev_text, fg_color=("#10b981", "#059669")))
 
     def clean_text_action(self):
-        """Cleans the body text area, removing divider lines and ads while PRESERVING section/chapter headers."""
+        """Cleans the body text area, removing divider lines and ads while PRESERVING section/chapter headers.
+        Creates/updates the StoryArticle model so manually pasted stories can be audited and exported."""
         content = self.text_area.get("1.0", "end").strip()
         if not content:
             messagebox.showinfo("Empty", "No text in the body to clean.")
             return
 
         cleaned = clean_pure_text(content)
+        cleaned = StoryScraper.clean_text(cleaned)
         self.text_area.delete("1.0", "end")
         self.text_area.insert("1.0", cleaned)
 
-        self._run_policy_analysis(self.title_entry.get().strip(), cleaned)
+        title = self.title_entry.get().strip() or "Untitled Story"
+        words = len(cleaned.split())
+        read_time = max(1, round(words / 220))
+
+        paragraphs = [p.strip() for p in cleaned.split("\n\n") if p.strip()]
+        if not paragraphs and cleaned:
+            paragraphs = [cleaned]
+
+        self.current_article = StoryArticle(
+            title=title,
+            original_url="Manual Paste",
+            domain="Manual Paste",
+            parts=[StoryPart(part_num=1, url="Manual Paste", paragraphs=paragraphs)]
+        )
+
+        self.stats_label.configure(
+            text=f"📖 1 Part  |  📝 {words:,} Words  |  ⏱️ ~{read_time} Min Read  |  📋 Cleaned Story",
+            text_color=("#10b981", "#34d399")
+        )
+
+        self._run_policy_analysis(title, cleaned)
 
         prev_text = self.clean_btn.cget("text")
         self.clean_btn.configure(text="✓ Cleaned!", fg_color=("#10b981", "#059669"))
         self.status_label.configure(
-            text="✨ Cleaned body: Removed divider lines & ads (Story and chapter titles preserved).",
+            text=f"✨ Cleaned story ({words:,} words): Divider lines & ads removed. Policy audited & ready to export.",
             text_color=("#10b981", "#34d399")
         )
         self.after(1800, lambda: self.clean_btn.configure(text=prev_text, fg_color=("#f59e0b", "#d97706")))
@@ -1009,10 +1343,10 @@ class StoryScraperApp(ctk.CTk):
     def save_as_txt(self):
         content = self.text_area.get("1.0", "end").strip()
         if not content:
-            messagebox.showwarning("No Story", "Please fetch a story before saving.")
+            messagebox.showwarning("No Story", "Please fetch or enter a story before saving.")
             return
 
-        title = self.title_entry.get().strip() or "story"
+        title = self.title_entry.get().strip() or (self.current_article.title if self.current_article else "story")
         default_name = self._sanitize_filename(title) + ".txt"
         file_path = filedialog.asksaveasfilename(
             defaultextension=".txt",
@@ -1027,14 +1361,22 @@ class StoryScraperApp(ctk.CTk):
     def save_as_markdown(self):
         content = self.text_area.get("1.0", "end").strip()
         if not content:
-            messagebox.showwarning("No Story", "Please fetch a story before saving.")
+            messagebox.showwarning("No Story", "Please fetch or enter a story before saving.")
             return
 
-        title = self.title_entry.get().strip() or "Story"
+        title = self.title_entry.get().strip() or (self.current_article.title if self.current_article else "Story")
         if self.current_article:
+            self.current_article.title = title
             md_content = self.current_article.to_markdown()
         else:
-            md_content = f"# {title}\n\n{content}"
+            paragraphs = [p.strip() for p in content.split("\n\n") if p.strip()]
+            self.current_article = StoryArticle(
+                title=title,
+                original_url="Manual Paste",
+                domain="Manual Paste",
+                parts=[StoryPart(part_num=1, url="Manual Paste", paragraphs=paragraphs)]
+            )
+            md_content = self.current_article.to_markdown()
 
         default_name = self._sanitize_filename(title) + ".md"
         file_path = filedialog.asksaveasfilename(
@@ -1048,9 +1390,22 @@ class StoryScraperApp(ctk.CTk):
             messagebox.showinfo("Saved", f"Story saved successfully as Markdown:\n{os.path.basename(file_path)}")
 
     def save_as_html(self):
-        if not self.current_article:
-            messagebox.showwarning("No Story", "Please fetch a story before saving.")
+        content = self.text_area.get("1.0", "end").strip()
+        if not content:
+            messagebox.showwarning("No Story", "Please fetch or enter a story before saving.")
             return
+
+        title = self.title_entry.get().strip() or (self.current_article.title if self.current_article else "Story")
+        if not self.current_article:
+            paragraphs = [p.strip() for p in content.split("\n\n") if p.strip()]
+            self.current_article = StoryArticle(
+                title=title,
+                original_url="Manual Paste",
+                domain="Manual Paste",
+                parts=[StoryPart(part_num=1, url="Manual Paste", paragraphs=paragraphs)]
+            )
+        else:
+            self.current_article.title = title
 
         default_name = self._sanitize_filename(self.current_article.title) + ".html"
         file_path = filedialog.asksaveasfilename(

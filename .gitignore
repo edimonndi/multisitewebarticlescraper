@@ -24,5 +24,7 @@ Thumbs.db
 Desktop.ini
 .DS_Store
 
-# Temporary Text Documents
+# Temporary Text Documents & Local Settings
 *.txt
+scraper_settings.json
+settings.json

@@ -35,10 +35,16 @@ DISCARD_STARTS = (
 )
 
 
-def create_resilient_session() -> requests.Session:
-    """Creates a fresh requests Session with retry adapter for high connection reliability."""
+def create_resilient_session(proxy: Optional[str] = None) -> requests.Session:
+    """Creates a fresh requests Session with retry adapter for high connection reliability, with optional proxy support."""
     session = requests.Session()
     session.headers.update(DEFAULT_HEADERS)
+    if proxy and proxy.strip():
+        proxy_url = proxy.strip()
+        session.proxies = {
+            "http": proxy_url,
+            "https": proxy_url
+        }
     retries = Retry(
         total=2,
         backoff_factor=0.3,
@@ -315,8 +321,23 @@ class StoryArticle:
 
 
 class StoryScraper:
-    def __init__(self):
-        self.session = create_resilient_session()
+    def __init__(self, proxy: Optional[str] = None):
+        self.proxy = proxy.strip() if proxy and proxy.strip() else None
+        self.session = create_resilient_session(self.proxy)
+
+    @staticmethod
+    def test_proxy_connection(proxy_url: str, test_target: str = "https://httpbin.org/ip") -> Tuple[bool, str]:
+        """Tests whether a proxy is working and returns (success, message)."""
+        if not proxy_url or not proxy_url.strip():
+            return False, "Proxy URL is empty."
+        try:
+            s = create_resilient_session(proxy_url.strip())
+            res = s.get(test_target, timeout=10)
+            if res.status_code == 200:
+                return True, f"Connected successfully! (HTTP {res.status_code})"
+            return False, f"Proxy returned status code: {res.status_code}"
+        except Exception as e:
+            return False, f"Connection failed: {str(e)}"
 
     @staticmethod
     def clean_text(text: str) -> str:
@@ -480,7 +501,7 @@ class StoryScraper:
         except Exception:
             # Retry with a fresh connection on transient network reset
             try:
-                fresh_session = create_resilient_session()
+                fresh_session = create_resilient_session(self.proxy)
                 res = fresh_session.get(url, timeout=14, allow_redirects=True)
                 if res.encoding is None or res.encoding.lower() in ["iso-8859-1", "windows-1252"]:
                     res.encoding = "utf-8"
@@ -501,7 +522,7 @@ class StoryScraper:
         cancel_event: Optional[threading.Event] = None
     ) -> StoryArticle:
         # Re-initialize fresh session per scrape to avoid state contamination
-        self.session = create_resilient_session()
+        self.session = create_resilient_session(self.proxy)
 
         url = url.strip().strip("'\"<> ")
         if not url:
