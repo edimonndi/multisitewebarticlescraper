@@ -313,7 +313,7 @@ class StoryArticle:
         </div>
         {content_body}
         <div class="footer">
-            Saved with <strong>DEA Story Scraper</strong> &bull; <a href="https://www.deainnovations.com" style="color:{accent_col}; text-decoration:none;" target="_blank">www.deainnovations.com</a>
+            Saved with <strong>DEA Story Scraper</strong> &bull; <a href="https://www.deainnovations.com" style="color:{accent_col}; text-decoration:none;" target="_blank">www.deainnovations.com</a> &bull; <a href="https://github.com/edimonndi" style="color:{accent_col}; text-decoration:none;" target="_blank">github.com/edimonndi</a>
         </div>
     </div>
 </body>

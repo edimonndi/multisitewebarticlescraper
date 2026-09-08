@@ -1005,6 +1005,24 @@ class StoryScraperApp(ctk.CTk):
         link_label.pack(side="left")
         link_label.bind("<Button-1>", lambda e: webbrowser.open("https://www.deainnovations.com"))
 
+        github_sep = ctk.CTkLabel(
+            footer_frame,
+            text="  •  by ",
+            font=ctk.CTkFont(size=12),
+            text_color=("#64748b", "#94a3b8"),
+        )
+        github_sep.pack(side="left")
+
+        github_link = ctk.CTkLabel(
+            footer_frame,
+            text="github.com/edimonndi",
+            font=ctk.CTkFont(size=12, weight="bold", underline=True),
+            text_color=("#10b981", "#34d399"),
+            cursor="hand2"
+        )
+        github_link.pack(side="left")
+        github_link.bind("<Button-1>", lambda e: webbrowser.open("https://github.com/edimonndi"))
+
         ready_label = ctk.CTkLabel(
             footer_frame,
             text="AdSense & AdsKeeper Policy Safety Shield Active",
