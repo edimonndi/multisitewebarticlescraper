@@ -326,6 +326,7 @@ class StoryScraper:
         for old, new in UNICODE_REPLACEMENTS.items():
             text = text.replace(old, new)
         text = re.sub(r"[ \t]+", " ", text)
+        text = re.sub(r"\s+('s|'t|'re|'ve|'m|'ll|'d)\b", r"\1", text, flags=re.IGNORECASE)
         return text.strip()
 
     @staticmethod
@@ -420,7 +421,10 @@ class StoryScraper:
         # Extract Paragraphs, Quotes, Lists, and Section Headings in exact document order
         paragraphs = []
         target_tags = ["h1", "h2", "h3", "h4", "h5", "h6", "p", "blockquote", "pre", "li"]
-        seen_texts = set()
+        nav_button_pattern = re.compile(
+            r"^(next\s*(page|part|post|story)?|prev(ious)?\s*(page|part|post|story)?|continue\s*(reading|to\s*next\s*part)?|click\s*here(\s*to\s*continue)?|page\s*\d+(\s*of\s*\d+)?|read\s*next:?|share\s*(this|on\s*\w+)?)$",
+            re.IGNORECASE
+        )
 
         for el in container.find_all(target_tags):
             # Skip parent container if it has child target tags to prevent duplicate text
@@ -441,8 +445,8 @@ class StoryScraper:
             if txt.startswith("http://") or txt.startswith("https://"):
                 continue
 
-            # Discard short pagination/nav fragments
-            if len(txt) < 20 and any(k in lower for k in ["next", "continue", "page", "part", "prev", "previous", "share", "read next"]):
+            # Discard standalone pagination/navigation buttons (e.g. "Next Page", "Continue Reading", "Page 2", "Next Part")
+            if len(txt) < 30 and nav_button_pattern.match(lower.strip(" \t\n\r:->»«")):
                 continue
 
             # Discard obvious advertising or author signatures
@@ -456,12 +460,6 @@ class StoryScraper:
                 continue
             if "press nex part in bottom of page" in lower or "press next part in bottom of page" in lower:
                 continue
-
-            # Smart duplicate check for repeated magazine pull-quotes
-            norm_txt = re.sub(r"\s+", " ", txt.strip().lower())
-            if norm_txt in seen_texts:
-                continue
-            seen_texts.add(norm_txt)
 
             paragraphs.append(txt)
 
