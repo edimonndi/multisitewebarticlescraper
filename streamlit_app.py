@@ -12,13 +12,34 @@ import streamlit.components.v1 as components
 from adsense_analyzer import AdSensePolicyAnalyzer, PolicyAnalysisResult, POLICY_RULES
 from scraper_engine import StoryArticle, StoryPart, StoryScraper, clean_pure_text
 
-# Set Page Config
+# Set Page Config - auto state collapses sidebar on mobile screens by default
 st.set_page_config(
     page_title="DEA Story Scraper & Reader Pro",
     page_icon="📖",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="auto"
 )
+
+
+def highlight_text_in_html(body_text: str, target_word: Optional[str]) -> str:
+    """Escapes HTML and wraps occurrences of target_word in glowing highlighted mark tags."""
+    if not body_text:
+        return ""
+    escaped_body = html.escape(body_text)
+    if not target_word or not target_word.strip():
+        return escaped_body
+
+    escaped_target = html.escape(target_word.strip())
+    # Match whole word or exact pattern case-insensitively
+    pattern = re.compile(rf"\b({re.escape(escaped_target)})\b", re.IGNORECASE)
+    if not pattern.search(escaped_body):
+        pattern = re.compile(re.escape(escaped_target), re.IGNORECASE)
+
+    highlighted = pattern.sub(
+        r'<mark style="background-color: #f59e0b; color: #000000; font-weight: 800; border-radius: 4px; padding: 2px 6px; box-shadow: 0 0 10px rgba(245, 158, 11, 0.7);">\g<0></mark>',
+        escaped_body
+    )
+    return highlighted
 
 
 def render_copy_button(text_to_copy: str, button_label: str = "📋 Copy", success_label: str = "✓ Copied!", key: str = "copy_btn", bg_color: str = "#2563eb"):
@@ -105,6 +126,14 @@ st.markdown("""
         -webkit-text-fill-color: transparent;
         margin-bottom: 0.2rem;
     }
+    @media (max-width: 768px) {
+        .main-header {
+            font-size: 1.6rem !important;
+        }
+        .metric-val {
+            font-size: 1.2rem !important;
+        }
+    }
     .sub-header {
         font-size: 1rem;
         color: #94a3b8;
@@ -166,6 +195,8 @@ if "edited_title" not in st.session_state:
     st.session_state.edited_title = ""
 if "cleaned_body" not in st.session_state:
     st.session_state.cleaned_body = ""
+if "highlight_word" not in st.session_state:
+    st.session_state.highlight_word = None
 
 
 # ================= SIDEBAR CONTROLS =================
@@ -267,6 +298,7 @@ with tab1:
                 st.session_state.article = article
                 st.session_state.edited_title = article.title
                 st.session_state.cleaned_body = article.to_pure_body()
+                st.session_state.highlight_word = None
 
                 # Audit Policy
                 analyzer = AdSensePolicyAnalyzer()
@@ -306,6 +338,7 @@ with tab2:
             st.session_state.article = synthetic_article
             st.session_state.edited_title = title
             st.session_state.cleaned_body = cleaned
+            st.session_state.highlight_word = None
 
             analyzer = AdSensePolicyAnalyzer()
             st.session_state.policy_result = analyzer.analyze(title, cleaned)
@@ -358,12 +391,25 @@ if st.session_state.article and st.session_state.cleaned_body:
 
             if res.flags:
                 st.markdown("#### Detected Sensitive Terms & Context:")
-                for flag in res.flags:
+                for idx, flag in enumerate(res.flags):
                     sev_badge = "🔴 HIGH" if flag.severity == "HIGH" else ("🟡 MEDIUM" if flag.severity == "MEDIUM" else "🔵 LOW")
                     desc = POLICY_RULES.get(flag.category, {}).get("description", "")
-                    st.markdown(f"**`{flag.word_or_phrase}`** ({sev_badge} · *{flag.category_label}*) — {flag.match_count} occurrence(s)")
-                    if desc:
-                        st.caption(f"_{desc}_")
+                    
+                    flag_col1, flag_col2 = st.columns([4, 1.4])
+                    with flag_col1:
+                        st.markdown(f"**`{flag.word_or_phrase}`** ({sev_badge} · *{flag.category_label}*) — {flag.match_count} occurrence(s)")
+                        if desc:
+                            st.caption(f"_{desc}_")
+                    with flag_col2:
+                        is_active = (st.session_state.get("highlight_word") == flag.word_or_phrase)
+                        btn_label = "✓ Highlighted" if is_active else "🔍 Find in Story"
+                        if st.button(btn_label, key=f"find_flag_{idx}_{flag.word_or_phrase}", use_container_width=True, type="primary" if is_active else "secondary"):
+                            if is_active:
+                                st.session_state.highlight_word = None
+                            else:
+                                st.session_state.highlight_word = flag.word_or_phrase
+                            st.rerun()
+
                     for snip in flag.context_snippets:
                         st.markdown(f"> *\"{snip}\"*")
             else:
@@ -391,12 +437,24 @@ if st.session_state.article and st.session_state.cleaned_body:
                 cleaned = clean_pure_text(st.session_state.cleaned_body)
                 cleaned = StoryScraper.clean_text(cleaned)
                 st.session_state.cleaned_body = cleaned
+                st.session_state.highlight_word = None
                 st.toast("✨ Story body cleaned and formatted!", icon="🧹")
                 st.rerun()
         with b2:
             render_copy_button(st.session_state.cleaned_body, button_label="📋 Copy Article", success_label="✓ Article Copied!", key="btn_copy_article", bg_color="#059669")
 
+    # Active Highlight Notification Strip
+    if st.session_state.get("highlight_word"):
+        hl_col1, hl_col2 = st.columns([5, 1.5])
+        with hl_col1:
+            st.info(f"🔍 Highlighting all occurrences of **`{st.session_state.highlight_word}`** in amber in the story reader below.")
+        with hl_col2:
+            if st.button("✕ Clear Highlight", use_container_width=True):
+                st.session_state.highlight_word = None
+                st.rerun()
+
     # Reader Content Box
+    highlighted_html = highlight_text_in_html(st.session_state.cleaned_body, st.session_state.get("highlight_word"))
     st.markdown(
         f"""
         <div style="
@@ -412,7 +470,7 @@ if st.session_state.article and st.session_state.cleaned_body:
             max-height: 600px;
             overflow-y: auto;
             text-align: justify;
-        ">{html.escape(st.session_state.cleaned_body)}</div>
+        ">{highlighted_html}</div>
         """,
         unsafe_allow_html=True
     )
