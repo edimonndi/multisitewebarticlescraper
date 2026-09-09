@@ -4,7 +4,7 @@ import json
 import os
 import re
 import time
-from typing import Optional
+from typing import Optional, Tuple
 
 import streamlit as st
 import streamlit.components.v1 as components
@@ -21,25 +21,54 @@ st.set_page_config(
 )
 
 
-def highlight_text_in_html(body_text: str, target_word: Optional[str]) -> str:
-    """Escapes HTML and wraps occurrences of target_word in glowing highlighted mark tags."""
+def highlight_text_in_html(body_text: str, target_word: Optional[str], active_index: int = 1) -> Tuple[str, int]:
+    """
+    Escapes HTML and highlights all occurrences of target_word.
+    Distinguishes the active occurrence with prominent glow, white outline, #X/Y badge, and active ID.
+    Returns (highlighted_html, total_matches).
+    """
     if not body_text:
-        return ""
+        return "", 0
     escaped_body = html.escape(body_text)
     if not target_word or not target_word.strip():
-        return escaped_body
+        return escaped_body, 0
 
     escaped_target = html.escape(target_word.strip())
     # Match whole word or exact pattern case-insensitively
     pattern = re.compile(rf"\b({re.escape(escaped_target)})\b", re.IGNORECASE)
-    if not pattern.search(escaped_body):
+    matches = list(pattern.finditer(escaped_body))
+    if not matches:
         pattern = re.compile(re.escape(escaped_target), re.IGNORECASE)
+        matches = list(pattern.finditer(escaped_body))
 
-    highlighted = pattern.sub(
-        r'<mark style="background-color: #f59e0b; color: #000000; font-weight: 800; border-radius: 4px; padding: 2px 6px; box-shadow: 0 0 10px rgba(245, 158, 11, 0.7);">\g<0></mark>',
-        escaped_body
-    )
-    return highlighted
+    total_matches = len(matches)
+    if total_matches == 0:
+        return escaped_body, 0
+
+    # Ensure active_index is 1-indexed and clamped in range [1, total_matches]
+    clamped_index = ((active_index - 1) % total_matches) + 1
+
+    result = []
+    last_pos = 0
+    for idx, match in enumerate(matches, start=1):
+        result.append(escaped_body[last_pos:match.start()])
+        matched_text = match.group(0)
+        
+        if idx == clamped_index:
+            # Active occurrence: bright glowing amber, white outline, and occurrence badge
+            badge_html = f'<span style="font-size: 0.72em; background: #0f172a; color: #38bdf8; border-radius: 3px; padding: 1px 5px; margin-left: 5px; vertical-align: middle; border: 1px solid #38bdf8; letter-spacing: 0;">#{idx}/{total_matches}</span>'
+            result.append(
+                f'<mark id="active-highlight-mark" style="background-color: #f59e0b; color: #000000; font-weight: 800; border-radius: 4px; padding: 2px 6px; box-shadow: 0 0 16px rgba(245, 158, 11, 0.95); border: 2px solid #ffffff; display: inline-block;">{matched_text}{badge_html}</mark>'
+            )
+        else:
+            # Passive occurrence: softer highlight
+            result.append(
+                f'<mark style="background-color: rgba(245, 158, 11, 0.35); color: #f8fafc; font-weight: 700; border-radius: 4px; padding: 2px 5px; border: 1px dashed rgba(245, 158, 11, 0.8);">{matched_text}</mark>'
+            )
+        last_pos = match.end()
+    
+    result.append(escaped_body[last_pos:])
+    return "".join(result), total_matches
 
 
 def render_copy_button(text_to_copy: str, button_label: str = "📋 Copy", success_label: str = "✓ Copied!", key: str = "copy_btn", bg_color: str = "#2563eb"):
@@ -197,6 +226,8 @@ if "cleaned_body" not in st.session_state:
     st.session_state.cleaned_body = ""
 if "highlight_word" not in st.session_state:
     st.session_state.highlight_word = None
+if "highlight_index" not in st.session_state:
+    st.session_state.highlight_index = 1
 
 
 # ================= SIDEBAR CONTROLS =================
@@ -299,6 +330,7 @@ with tab1:
                 st.session_state.edited_title = article.title
                 st.session_state.cleaned_body = article.to_pure_body()
                 st.session_state.highlight_word = None
+                st.session_state.highlight_index = 1
 
                 # Audit Policy
                 analyzer = AdSensePolicyAnalyzer()
@@ -339,6 +371,7 @@ with tab2:
             st.session_state.edited_title = title
             st.session_state.cleaned_body = cleaned
             st.session_state.highlight_word = None
+            st.session_state.highlight_index = 1
 
             analyzer = AdSensePolicyAnalyzer()
             st.session_state.policy_result = analyzer.analyze(title, cleaned)
@@ -395,20 +428,45 @@ if st.session_state.article and st.session_state.cleaned_body:
                     sev_badge = "🔴 HIGH" if flag.severity == "HIGH" else ("🟡 MEDIUM" if flag.severity == "MEDIUM" else "🔵 LOW")
                     desc = POLICY_RULES.get(flag.category, {}).get("description", "")
                     
-                    flag_col1, flag_col2 = st.columns([4, 1.4])
+                    flag_col1, flag_col2 = st.columns([3.6, 2.4])
                     with flag_col1:
                         st.markdown(f"**`{flag.word_or_phrase}`** ({sev_badge} · *{flag.category_label}*) — {flag.match_count} occurrence(s)")
                         if desc:
                             st.caption(f"_{desc}_")
                     with flag_col2:
                         is_active = (st.session_state.get("highlight_word") == flag.word_or_phrase)
-                        btn_label = "✓ Highlighted" if is_active else "🔍 Find in Story"
-                        if st.button(btn_label, key=f"find_flag_{idx}_{flag.word_or_phrase}", use_container_width=True, type="primary" if is_active else "secondary"):
-                            if is_active:
-                                st.session_state.highlight_word = None
+                        if is_active:
+                            cur_idx = ((st.session_state.get("highlight_index", 1) - 1) % max(1, flag.match_count)) + 1
+                            if flag.match_count > 1:
+                                btn_prev_c, btn_next_c, btn_clr_c = st.columns([1, 1.4, 0.8])
+                                with btn_prev_c:
+                                    if st.button("⏮", key=f"prev_flag_{idx}_{flag.word_or_phrase}", help="Previous occurrence", use_container_width=True):
+                                        st.session_state.highlight_index = flag.match_count if cur_idx == 1 else (cur_idx - 1)
+                                        st.rerun()
+                                with btn_next_c:
+                                    if st.button(f"⏭ {cur_idx}/{flag.match_count}", key=f"next_flag_{idx}_{flag.word_or_phrase}", type="primary", help="Go to next occurrence in story", use_container_width=True):
+                                        st.session_state.highlight_index = 1 if cur_idx >= flag.match_count else (cur_idx + 1)
+                                        st.rerun()
+                                with btn_clr_c:
+                                    if st.button("✕", key=f"clr_flag_{idx}_{flag.word_or_phrase}", help="Clear highlight", use_container_width=True):
+                                        st.session_state.highlight_word = None
+                                        st.session_state.highlight_index = 1
+                                        st.rerun()
                             else:
+                                btn_act_c, btn_clr_c = st.columns([2, 1])
+                                with btn_act_c:
+                                    st.button("✓ Highlighted", key=f"act_flag_{idx}_{flag.word_or_phrase}", disabled=True, use_container_width=True)
+                                with btn_clr_c:
+                                    if st.button("✕", key=f"clr_flag_{idx}_{flag.word_or_phrase}", help="Clear highlight", use_container_width=True):
+                                        st.session_state.highlight_word = None
+                                        st.session_state.highlight_index = 1
+                                        st.rerun()
+                        else:
+                            label = f"🔍 Find ({flag.match_count})" if flag.match_count > 1 else "🔍 Find in Story"
+                            if st.button(label, key=f"find_flag_{idx}_{flag.word_or_phrase}", use_container_width=True):
                                 st.session_state.highlight_word = flag.word_or_phrase
-                            st.rerun()
+                                st.session_state.highlight_index = 1
+                                st.rerun()
 
                     for snip in flag.context_snippets:
                         st.markdown(f"> *\"{snip}\"*")
@@ -438,26 +496,55 @@ if st.session_state.article and st.session_state.cleaned_body:
                 cleaned = StoryScraper.clean_text(cleaned)
                 st.session_state.cleaned_body = cleaned
                 st.session_state.highlight_word = None
+                st.session_state.highlight_index = 1
                 st.toast("✨ Story body cleaned and formatted!", icon="🧹")
                 st.rerun()
         with b2:
             render_copy_button(st.session_state.cleaned_body, button_label="📋 Copy Article", success_label="✓ Article Copied!", key="btn_copy_article", bg_color="#059669")
 
-    # Active Highlight Notification Strip
-    if st.session_state.get("highlight_word"):
-        hl_col1, hl_col2 = st.columns([5, 1.5])
-        with hl_col1:
-            st.info(f"🔍 Highlighting all occurrences of **`{st.session_state.highlight_word}`** in amber in the story reader below.")
-        with hl_col2:
-            if st.button("✕ Clear Highlight", use_container_width=True):
-                st.session_state.highlight_word = None
-                st.rerun()
+    # Generate highlighted HTML, active count, and reader rendering
+    highlighted_html, total_matches = highlight_text_in_html(
+        st.session_state.cleaned_body,
+        st.session_state.get("highlight_word"),
+        st.session_state.get("highlight_index", 1)
+    )
+    
+    current_active_idx = ((st.session_state.get("highlight_index", 1) - 1) % max(1, total_matches)) + 1 if total_matches > 0 else 1
 
-    # Reader Content Box
-    highlighted_html = highlight_text_in_html(st.session_state.cleaned_body, st.session_state.get("highlight_word"))
+    # Active Highlight Navigation Toolbar
+    if st.session_state.get("highlight_word") and total_matches > 0:
+        hl_col_info, hl_col_nav, hl_col_clear = st.columns([4.2, 3.2, 1.2])
+        with hl_col_info:
+            st.info(f"🔍 Finding **`{st.session_state.highlight_word}`** — Occurrence **{current_active_idx} of {total_matches}**")
+        with hl_col_nav:
+            if total_matches > 1:
+                p_col, n_col = st.columns(2)
+                with p_col:
+                    if st.button("⏮ Previous", key="reader_prev_btn", use_container_width=True):
+                        st.session_state.highlight_index = total_matches if current_active_idx == 1 else (current_active_idx - 1)
+                        st.rerun()
+                with n_col:
+                    if st.button(f"⏭ Next ({current_active_idx}/{total_matches})", key="reader_next_btn", type="primary", use_container_width=True):
+                        st.session_state.highlight_index = 1 if current_active_idx >= total_matches else (current_active_idx + 1)
+                        st.rerun()
+            else:
+                st.caption("_(Single occurrence found in story)_")
+        with hl_col_clear:
+            if st.button("✕ Clear", key="reader_clear_btn", use_container_width=True):
+                st.session_state.highlight_word = None
+                st.session_state.highlight_index = 1
+                st.rerun()
+    elif st.session_state.get("highlight_word") and total_matches == 0:
+        st.warning(f"⚠️ No matches found for '{st.session_state.highlight_word}' in the cleaned body.")
+
+    # Reader Content Box with auto-scroll script
+    scroll_script = ""
+    if st.session_state.get("highlight_word") and total_matches > 0:
+        scroll_script = """<img src="data:image/svg+xml;utf8,<svg></svg>" style="display:none;" onerror="setTimeout(function(){ var el = document.getElementById('active-highlight-mark'); if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); } }, 120);" />"""
+
     st.markdown(
         f"""
-        <div style="
+        <div id="story-reader-container" style="
             background: rgba(15, 23, 42, 0.7);
             border: 1px solid rgba(51, 65, 85, 0.8);
             border-radius: 12px;
@@ -470,7 +557,7 @@ if st.session_state.article and st.session_state.cleaned_body:
             max-height: 600px;
             overflow-y: auto;
             text-align: justify;
-        ">{highlighted_html}</div>
+        ">{highlighted_html}{scroll_script}</div>
         """,
         unsafe_allow_html=True
     )
