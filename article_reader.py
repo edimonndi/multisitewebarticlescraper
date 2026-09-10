@@ -92,6 +92,8 @@ class PolicyReportDialog(ctk.CTkToplevel):
 
         self.result = analysis_result
         self.on_highlight_word = on_highlight_word
+        self.active_word = getattr(parent, "highlight_word", None)
+        self.active_index = getattr(parent, "highlight_index", 1)
 
         self._build_ui()
         self.focus_force()
@@ -182,12 +184,18 @@ class PolicyReportDialog(ctk.CTkToplevel):
             text_color=("#1e293b", "#f8fafc")
         ).pack(side="left")
 
-        scroll_area = ctk.CTkScrollableFrame(list_card, fg_color="transparent")
-        scroll_area.pack(fill="both", expand=True, padx=12, pady=(0, 12))
+        self.scroll_area = ctk.CTkScrollableFrame(list_card, fg_color="transparent")
+        self.scroll_area.pack(fill="both", expand=True, padx=12, pady=(0, 12))
+
+        self._render_flags()
+
+    def _render_flags(self):
+        for w in self.scroll_area.winfo_children():
+            w.destroy()
 
         if not self.result.flags:
             clean_msg = ctk.CTkLabel(
-                scroll_area,
+                self.scroll_area,
                 text="🎉 Excellent! Zero prohibited or sensitive words detected.\n\nThis article is 100% compliant with Google AdSense and AdsKeeper policies.",
                 font=ctk.CTkFont(size=13),
                 text_color=("#10b981", "#34d399"),
@@ -196,7 +204,7 @@ class PolicyReportDialog(ctk.CTkToplevel):
             clean_msg.pack(pady=40)
         else:
             for flag in self.result.flags:
-                self._create_flag_item(scroll_area, flag)
+                self._create_flag_item(self.scroll_area, flag)
 
     def _create_flag_item(self, parent, flag):
         item_frame = ctk.CTkFrame(parent, fg_color=("#f8fafc", "#0f172a"), corner_radius=8, border_width=1, border_color=("#e2e8f0", "#334155"))
@@ -226,20 +234,96 @@ class PolicyReportDialog(ctk.CTkToplevel):
         )
         word_lbl.pack(side="left")
 
+        # Action Buttons Box (Find / Next / Prev / Clear)
         if self.on_highlight_word:
-            h_btn = ctk.CTkButton(
-                header_row,
-                text="🔍 Find in Text",
-                width=80,
-                height=22,
-                font=ctk.CTkFont(size=10, weight="bold"),
-                fg_color=("#cbd5e1", "#334155"),
-                text_color=("#0f172a", "#f8fafc"),
-                hover_color=("#94a3b8", "#475569"),
-                corner_radius=4,
-                command=lambda w=flag.word_or_phrase: self._find_and_highlight(w)
-            )
-            h_btn.pack(side="right")
+            action_box = ctk.CTkFrame(header_row, fg_color="transparent")
+            action_box.pack(side="right")
+
+            is_active = (self.active_word == flag.word_or_phrase)
+            if is_active:
+                cur_idx = ((self.active_index - 1) % max(1, flag.match_count)) + 1
+                if flag.match_count > 1:
+                    prev_b = ctk.CTkButton(
+                        action_box,
+                        text="⏮",
+                        width=28,
+                        height=24,
+                        font=ctk.CTkFont(size=11, weight="bold"),
+                        fg_color=("#cbd5e1", "#334155"),
+                        text_color=("#0f172a", "#f8fafc"),
+                        hover_color=("#94a3b8", "#475569"),
+                        corner_radius=4,
+                        command=lambda w=flag.word_or_phrase, cnt=flag.match_count, ci=cur_idx: self._handle_prev(w, cnt, ci)
+                    )
+                    prev_b.pack(side="left", padx=(0, 3))
+
+                    next_b = ctk.CTkButton(
+                        action_box,
+                        text=f"⏭ {cur_idx}/{flag.match_count}",
+                        width=72,
+                        height=24,
+                        font=ctk.CTkFont(size=11, weight="bold"),
+                        fg_color=("#3b82f6", "#2563eb"),
+                        hover_color=("#2563eb", "#1d4ed8"),
+                        corner_radius=4,
+                        command=lambda w=flag.word_or_phrase, cnt=flag.match_count, ci=cur_idx: self._handle_next(w, cnt, ci)
+                    )
+                    next_b.pack(side="left", padx=(0, 3))
+
+                    clr_b = ctk.CTkButton(
+                        action_box,
+                        text="✕",
+                        width=28,
+                        height=24,
+                        font=ctk.CTkFont(size=11, weight="bold"),
+                        fg_color=("#cbd5e1", "#334155"),
+                        text_color=("#0f172a", "#f8fafc"),
+                        hover_color=("#ef4444", "#dc2626"),
+                        corner_radius=4,
+                        command=self._handle_clear
+                    )
+                    clr_b.pack(side="left")
+                else:
+                    act_b = ctk.CTkButton(
+                        action_box,
+                        text="✓ Highlighted",
+                        width=90,
+                        height=24,
+                        font=ctk.CTkFont(size=10, weight="bold"),
+                        fg_color=("#10b981", "#059669"),
+                        corner_radius=4,
+                        state="disabled"
+                    )
+                    act_b.pack(side="left", padx=(0, 3))
+
+                    clr_b = ctk.CTkButton(
+                        action_box,
+                        text="✕",
+                        width=28,
+                        height=24,
+                        font=ctk.CTkFont(size=11, weight="bold"),
+                        fg_color=("#cbd5e1", "#334155"),
+                        text_color=("#0f172a", "#f8fafc"),
+                        hover_color=("#ef4444", "#dc2626"),
+                        corner_radius=4,
+                        command=self._handle_clear
+                    )
+                    clr_b.pack(side="left")
+            else:
+                label = f"🔍 Find ({flag.match_count}x)" if flag.match_count > 1 else "🔍 Find in Text"
+                h_btn = ctk.CTkButton(
+                    action_box,
+                    text=label,
+                    width=95,
+                    height=24,
+                    font=ctk.CTkFont(size=11, weight="bold"),
+                    fg_color=("#cbd5e1", "#334155"),
+                    text_color=("#0f172a", "#f8fafc"),
+                    hover_color=("#94a3b8", "#475569"),
+                    corner_radius=4,
+                    command=lambda w=flag.word_or_phrase: self._handle_find(w)
+                )
+                h_btn.pack(side="right")
 
         if flag.context_snippets:
             snippet_box = ctk.CTkFrame(item_frame, fg_color="transparent")
@@ -255,9 +339,35 @@ class PolicyReportDialog(ctk.CTkToplevel):
                 )
                 snip_lbl.pack(anchor="w", pady=1)
 
-    def _find_and_highlight(self, word: str):
+    def _handle_find(self, word: str):
+        self.active_word = word
+        self.active_index = 1
         if self.on_highlight_word:
-            self.on_highlight_word(word)
+            self.on_highlight_word(word, 1)
+        self._render_flags()
+
+    def _handle_next(self, word: str, total_count: int, current_idx: int):
+        next_idx = 1 if current_idx >= total_count else (current_idx + 1)
+        self.active_word = word
+        self.active_index = next_idx
+        if self.on_highlight_word:
+            self.on_highlight_word(word, next_idx)
+        self._render_flags()
+
+    def _handle_prev(self, word: str, total_count: int, current_idx: int):
+        prev_idx = total_count if current_idx <= 1 else (current_idx - 1)
+        self.active_word = word
+        self.active_index = prev_idx
+        if self.on_highlight_word:
+            self.on_highlight_word(word, prev_idx)
+        self._render_flags()
+
+    def _handle_clear(self):
+        self.active_word = None
+        self.active_index = 1
+        if self.on_highlight_word:
+            self.on_highlight_word("", 1)
+        self._render_flags()
 
 
 class ProxySettingsDialog(ctk.CTkToplevel):
@@ -500,6 +610,11 @@ class StoryScraperApp(ctk.CTk):
         self.scrape_thread: Optional[threading.Thread] = None
         self.cancel_event = threading.Event()
         self.is_scraping = False
+
+        # Highlight & Search State
+        self.highlight_word: Optional[str] = None
+        self.highlight_index: int = 1
+        self.highlight_positions: list = []
 
         # Reader Settings State
         self.font_size = 15
@@ -962,6 +1077,61 @@ class StoryScraperApp(ctk.CTk):
         )
         self.copy_article_btn.pack(side="left", padx=4)
 
+        # Active Search & Occurrence Navigation Bar
+        self.hl_toolbar = ctk.CTkFrame(body_card, fg_color=("#f1f5f9", "#0f172a"), corner_radius=8, border_width=1, border_color=("#f59e0b", "#d97706"))
+
+        self.hl_info_label = ctk.CTkLabel(
+            self.hl_toolbar,
+            text="",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            text_color=("#b45309", "#fbbf24")
+        )
+        self.hl_info_label.pack(side="left", padx=(14, 10), pady=6)
+
+        hl_btn_box = ctk.CTkFrame(self.hl_toolbar, fg_color="transparent")
+        hl_btn_box.pack(side="right", padx=10, pady=6)
+
+        self.hl_prev_btn = ctk.CTkButton(
+            hl_btn_box,
+            text="⏮ Previous",
+            width=78,
+            height=26,
+            font=ctk.CTkFont(size=11, weight="bold"),
+            fg_color=("#cbd5e1", "#334155"),
+            text_color=("#0f172a", "#f8fafc"),
+            hover_color=("#94a3b8", "#475569"),
+            corner_radius=4,
+            command=self.prev_highlight_occurrence
+        )
+        self.hl_prev_btn.pack(side="left", padx=2)
+
+        self.hl_next_btn = ctk.CTkButton(
+            hl_btn_box,
+            text="⏭ Next",
+            width=88,
+            height=26,
+            font=ctk.CTkFont(size=11, weight="bold"),
+            fg_color=("#3b82f6", "#2563eb"),
+            hover_color=("#2563eb", "#1d4ed8"),
+            corner_radius=4,
+            command=self.next_highlight_occurrence
+        )
+        self.hl_next_btn.pack(side="left", padx=2)
+
+        self.hl_clear_btn = ctk.CTkButton(
+            hl_btn_box,
+            text="✕ Clear",
+            width=65,
+            height=26,
+            font=ctk.CTkFont(size=11, weight="bold"),
+            fg_color=("#cbd5e1", "#334155"),
+            text_color=("#0f172a", "#f8fafc"),
+            hover_color=("#ef4444", "#dc2626"),
+            corner_radius=4,
+            command=self.clear_highlight
+        )
+        self.hl_clear_btn.pack(side="left", padx=2)
+
         self.text_area = ctk.CTkTextbox(
             body_card,
             wrap="word",
@@ -973,6 +1143,11 @@ class StoryScraperApp(ctk.CTk):
             pady=16,
         )
         self.text_area.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+
+        # Tag configurations for active & passive highlights
+        self.text_area._textbox.tag_configure("active_highlight", background="#f59e0b", foreground="#000000")
+        self.text_area._textbox.tag_configure("passive_highlight", background="#78350f", foreground="#fef08a")
+        self.text_area._textbox.tag_raise("active_highlight")
 
         self.text_area.insert(
             "1.0",
@@ -1108,6 +1283,7 @@ class StoryScraperApp(ctk.CTk):
         self.is_scraping = True
         self.cancel_event.clear()
         self.current_article = None
+        self.clear_highlight()
 
         # Clean UI state for new scrape
         self.fetch_btn.configure(state="disabled")
@@ -1261,32 +1437,125 @@ class StoryScraperApp(ctk.CTk):
 
         PolicyReportDialog(self, self.last_analysis, on_highlight_word=self.highlight_word_in_reader)
 
-    def highlight_word_in_reader(self, word: str):
-        """Highlights instances of a flagged word in the text area."""
-        self.text_area.tag_remove("highlight", "1.0", "end")
-        if not word:
+    def highlight_word_in_reader(self, word: str, occurrence_index: int = 1):
+        """
+        Highlights occurrences of a flagged word in the text area.
+        Distinguishes active occurrence in bright glowing amber and passive occurrences in soft amber.
+        Centers the viewport directly onto the active occurrence.
+        """
+        if not word or not word.strip():
+            self.clear_highlight()
             return
 
-        self.text_area._textbox.tag_configure("highlight", background="#f59e0b", foreground="#000000")
+        word = word.strip()
+        self.highlight_word = word
 
+        # Remove previous tags
+        self.text_area._textbox.tag_remove("active_highlight", "1.0", "end")
+        self.text_area._textbox.tag_remove("passive_highlight", "1.0", "end")
+
+        # Find all occurrences
+        positions = []
         start_pos = "1.0"
-        first_match = None
         while True:
-            start_pos = self.text_area._textbox.search(word, start_pos, stopindex="end", nocase=True)
-            if not start_pos:
+            pos = self.text_area._textbox.search(word, start_pos, stopindex="end", nocase=True)
+            if not pos:
                 break
-            if not first_match:
-                first_match = start_pos
-            end_pos = f"{start_pos}+{len(word)}c"
-            self.text_area._textbox.tag_add("highlight", start_pos, end_pos)
+            end_pos = f"{pos}+{len(word)}c"
+            positions.append((pos, end_pos))
             start_pos = end_pos
 
-        if first_match:
-            self.text_area._textbox.see(first_match)
+        self.highlight_positions = positions
+        total = len(positions)
+
+        if total == 0:
             self.status_label.configure(
-                text=f"🔍 Highlighted occurrences of '{word}' in the reader.",
+                text=f"⚠️ No matches found for '{word}' in the reader.",
                 text_color=("#f59e0b", "#fbbf24")
             )
+            self._update_highlight_toolbar()
+            return
+
+        # Clamp occurrence index (1-indexed)
+        clamped_idx = ((occurrence_index - 1) % total) + 1
+        self.highlight_index = clamped_idx
+
+        # Apply tags
+        for idx, (sp, ep) in enumerate(positions, start=1):
+            if idx == clamped_idx:
+                self.text_area._textbox.tag_add("active_highlight", sp, ep)
+            else:
+                self.text_area._textbox.tag_add("passive_highlight", sp, ep)
+
+        # Center view onto active occurrence
+        active_sp, _ = positions[clamped_idx - 1]
+        self._center_text_on_position(active_sp)
+
+        # Update status and navigation toolbar
+        self.status_label.configure(
+            text=f"🔍 Finding '{word}' — Occurrence {clamped_idx} of {total}",
+            text_color=("#f59e0b", "#fbbf24")
+        )
+        self._update_highlight_toolbar()
+
+    def next_highlight_occurrence(self):
+        """Advances to the next occurrence of the currently highlighted word."""
+        if not self.highlight_word or not self.highlight_positions:
+            return
+        next_idx = self.highlight_index + 1
+        self.highlight_word_in_reader(self.highlight_word, next_idx)
+
+    def prev_highlight_occurrence(self):
+        """Goes to the previous occurrence of the currently highlighted word."""
+        if not self.highlight_word or not self.highlight_positions:
+            return
+        total = len(self.highlight_positions)
+        prev_idx = total if self.highlight_index <= 1 else (self.highlight_index - 1)
+        self.highlight_word_in_reader(self.highlight_word, prev_idx)
+
+    def clear_highlight(self):
+        """Clears all word highlights and hides the search navigation toolbar."""
+        self.highlight_word = None
+        self.highlight_index = 1
+        self.highlight_positions = []
+        try:
+            self.text_area._textbox.tag_remove("active_highlight", "1.0", "end")
+            self.text_area._textbox.tag_remove("passive_highlight", "1.0", "end")
+        except Exception:
+            pass
+        self._update_highlight_toolbar()
+        self.status_label.configure(text="Ready.", text_color=("#64748b", "#94a3b8"))
+
+    def _center_text_on_position(self, pos: str):
+        """Smoothly centers the Text widget view around the given character position."""
+        try:
+            line_num = int(pos.split(".")[0])
+            total_lines = max(1, int(self.text_area._textbox.index("end-1c").split(".")[0]))
+            visible_lines = 22
+            target_top = max(1, line_num - (visible_lines // 2))
+            fraction = (target_top - 1) / total_lines
+            self.text_area._textbox.yview_moveto(max(0.0, min(1.0, fraction)))
+            self.text_area._textbox.see(pos)
+            self.text_area._textbox.mark_set("insert", pos)
+        except Exception:
+            try:
+                self.text_area._textbox.see(pos)
+            except Exception:
+                pass
+
+    def _update_highlight_toolbar(self):
+        """Shows or hides the active search navigation toolbar above the story reader."""
+        if not self.highlight_word or not self.highlight_positions:
+            self.hl_toolbar.pack_forget()
+            return
+
+        total = len(self.highlight_positions)
+        cur = self.highlight_index
+        self.hl_info_label.configure(text=f"🔍 Finding \"{self.highlight_word}\"  •  Match {cur} of {total}")
+        self.hl_next_btn.configure(text=f"⏭ Next ({cur}/{total})")
+
+        # Show toolbar above text area
+        self.hl_toolbar.pack(fill="x", padx=16, pady=(0, 6), before=self.text_area)
 
     def copy_title_to_clipboard(self):
         """Copies ONLY the article title."""
@@ -1328,6 +1597,7 @@ class StoryScraperApp(ctk.CTk):
 
         cleaned = clean_pure_text(content)
         cleaned = StoryScraper.clean_text(cleaned)
+        self.clear_highlight()
         self.text_area.delete("1.0", "end")
         self.text_area.insert("1.0", cleaned)
 

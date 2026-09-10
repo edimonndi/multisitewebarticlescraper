@@ -55,15 +55,15 @@ def highlight_text_in_html(body_text: str, target_word: Optional[str], active_in
         matched_text = match.group(0)
         
         if idx == clamped_index:
-            # Active occurrence: bright glowing amber, white outline, and occurrence badge
+            # Active occurrence: bright pulsating glowing amber, white outline, and occurrence badge
             badge_html = f'<span style="font-size: 0.72em; background: #0f172a; color: #38bdf8; border-radius: 3px; padding: 1px 5px; margin-left: 5px; vertical-align: middle; border: 1px solid #38bdf8; letter-spacing: 0;">#{idx}/{total_matches}</span>'
             result.append(
-                f'<mark id="active-highlight-mark" style="background-color: #f59e0b; color: #000000; font-weight: 800; border-radius: 4px; padding: 2px 6px; box-shadow: 0 0 16px rgba(245, 158, 11, 0.95); border: 2px solid #ffffff; display: inline-block;">{matched_text}{badge_html}</mark>'
+                f'<mark id="active-highlight-mark" class="active-mark-glow" style="background-color: #f59e0b; color: #000000; font-weight: 900; border-radius: 5px; padding: 3px 8px; border: 2.5px solid #ffffff; display: inline-block; box-shadow: 0 0 20px rgba(245, 158, 11, 1); scroll-margin: 160px 0;">{matched_text}{badge_html}</mark>'
             )
         else:
             # Passive occurrence: softer highlight
             result.append(
-                f'<mark style="background-color: rgba(245, 158, 11, 0.35); color: #f8fafc; font-weight: 700; border-radius: 4px; padding: 2px 5px; border: 1px dashed rgba(245, 158, 11, 0.8);">{matched_text}</mark>'
+                f'<mark class="passive-mark-soft" style="background-color: rgba(245, 158, 11, 0.35); color: #f8fafc; font-weight: 700; border-radius: 4px; padding: 2px 6px; border: 1px dashed rgba(245, 158, 11, 0.85); display: inline-block;">{matched_text}</mark>'
             )
         last_pos = match.end()
     
@@ -210,6 +210,27 @@ st.markdown("""
         color: #38bdf8;
         text-decoration: none;
         font-weight: 600;
+    }
+    @keyframes pulseActiveMark {
+        0% {
+            box-shadow: 0 0 10px rgba(245, 158, 11, 0.9), 0 0 20px rgba(245, 158, 11, 0.5);
+            border-color: #ffffff;
+        }
+        50% {
+            box-shadow: 0 0 25px rgba(245, 158, 11, 1), 0 0 45px rgba(251, 191, 36, 0.95);
+            border-color: #38bdf8;
+        }
+        100% {
+            box-shadow: 0 0 10px rgba(245, 158, 11, 0.9), 0 0 20px rgba(245, 158, 11, 0.5);
+            border-color: #ffffff;
+        }
+    }
+    .active-mark-glow {
+        animation: pulseActiveMark 1.5s infinite ease-in-out !important;
+        scroll-margin: 160px 0 !important;
+    }
+    .passive-mark-soft {
+        scroll-margin: 160px 0 !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -541,7 +562,31 @@ if st.session_state.article and st.session_state.cleaned_body:
     # Reader Content Box with auto-scroll script
     scroll_script = ""
     if st.session_state.get("highlight_word") and total_matches > 0:
-        scroll_script = """<img src="data:image/svg+xml;utf8,<svg></svg>" style="display:none;" onerror="setTimeout(function(){ var el = document.getElementById('active-highlight-mark'); if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); } }, 120);" />"""
+        scroll_script = (
+            '<img src="x" style="display:none;" onerror="'
+            '(function(){'
+            '  function performScroll(){'
+            '    var el = document.getElementById(\'active-highlight-mark\');'
+            '    var box = document.getElementById(\'story-reader-container\');'
+            '    if (el) {'
+            '      try {'
+            '        el.scrollIntoView({ behavior: \'smooth\', block: \'center\', inline: \'nearest\' });'
+            '      } catch(e) { el.scrollIntoView(true); }'
+            '      if (box) {'
+            '        var rect = box.getBoundingClientRect();'
+            '        if (rect.top < 80 || rect.top > (window.innerHeight - 160)) {'
+            '          try {'
+            '            box.scrollIntoView({ behavior: \'smooth\', block: \'start\' });'
+            '          } catch(e) {}'
+            '        }'
+            '      }'
+            '    }'
+            '  }'
+            '  setTimeout(performScroll, 60);'
+            '  setTimeout(performScroll, 220);'
+            '  setTimeout(performScroll, 550);'
+            '})();" />'
+        )
 
     st.markdown(
         f"""
