@@ -250,6 +250,7 @@ with st.sidebar:
         "Aliacar News (1 Part)": "https://aliacar.net.tr/husbands-with-these-2-bad-habits-may-put-their-wives-at-higher-risk-of-breast-cancer-stop-them-now-before-they-harm-the-whole-family/",
         "Happy Soul Shop (1 Part)": "https://happysoulshop.com/we-adopted-a-girl-in-a-wheelchair-but-her-first-words-about-our-basement-left-us-frozen/",
         "AmoMedia (1 Part)": "https://amomedia.com/661995-my-fiancee-kept-assuring-me-that-she.html",
+        "LaptopsVilla (2 Parts)": "https://laptopsvilla.com/25-instances-where-the-simpsons-anticipated-the-future/",
     }
     selected_preset = st.selectbox("Load Target Preset", list(sample_presets.keys()))
     preset_url_val = sample_presets[selected_preset] if selected_preset != "Select a sample URL..." else ""
@@ -297,7 +298,7 @@ with tab1:
         input_url = st.text_input(
             "Enter Story URL:",
             value=preset_url_val,
-            placeholder="https://america-focus.com/... or feji.io, fanstopis.com, levanews.com, kaylestore.net...",
+            placeholder="https://america-focus.com/... or laptopsvilla.com, feji.io, fanstopis.com, levanews.com, kaylestore.net...",
             label_visibility="collapsed"
         )
     with col_btn:

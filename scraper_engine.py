@@ -356,7 +356,7 @@ class StoryScraper:
             return "Untitled Story"
         title = StoryScraper.clean_text(title)
         title = re.sub(
-            r"\s*[-|–—]\s*(America Focus|Fanstopis|LEVANEWS|Human Heart Tales|DAILY STORIES|Kaylestore|Lead to Happiness|1 Million Stories|Happy Soul Shop|AmoMedia|Alu News|Aliacar|The Celebritist|Celebritist|Stories).*$",
+            r"\s*[-|–—•]\s*(America Focus|Fanstopis|LEVANEWS|Human Heart Tales|DAILY STORIES|Kaylestore|Lead to Happiness|1 Million Stories|Happy Soul Shop|AmoMedia|Alu News|Aliacar|The Celebritist|Celebritist|LaptopsVilla|Laptops\s*Villa|Stories).*$",
             "",
             title,
             flags=re.IGNORECASE,
@@ -415,13 +415,13 @@ class StoryScraper:
         ]):
             tag.decompose()
 
-        # Safely decompose ads and social share widgets without deleting story blocks/blockquotes
-        for tag in list(container.find_all(class_=re.compile(r"(banner|social-share|share-box|author-box|author-bio|widget-area|comments-area|nav-links|wp-block-buttons|disclaimer|adv\b|ad-container|ad_container|ad-wrapper|carousel|snap-container)", re.IGNORECASE))):
+        # Safely decompose ads, pagination wrappers, and social share widgets without deleting story blocks/blockquotes
+        for tag in list(container.find_all(class_=re.compile(r"(banner|social-share|share-box|author-box|author-bio|widget-area|comments-area|nav-links|wp-block-buttons|disclaimer|adv\b|ad-container|ad_container|ad-wrapper|carousel|snap-container|post-page-numbers|page-links)", re.IGNORECASE))):
             if not tag.find_all(["p", "h1", "h2", "h3", "h4", "blockquote"]):
                 tag.decompose()
             elif "adv" in str(tag.get("class", [])).lower() and "advertisement" in tag.get_text().lower() and len(tag.get_text(strip=True)) < 30:
                 tag.decompose()
-            elif any(k in str(tag.get("class", [])).lower() for k in ["carousel", "snap-container", "post-list"]):
+            elif any(k in str(tag.get("class", [])).lower() for k in ["carousel", "snap-container", "post-list", "post-page-numbers", "page-links"]):
                 tag.decompose()
 
         for tag in list(container.find_all(id=re.compile(r"(social-share|author-bio|comments|disclaimer|adv|ad)", re.IGNORECASE))):
@@ -466,8 +466,9 @@ class StoryScraper:
             if txt.startswith("http://") or txt.startswith("https://"):
                 continue
 
-            # Discard standalone pagination/navigation buttons (e.g. "Next Page", "Continue Reading", "Page 2", "Next Part")
-            if len(txt) < 30 and nav_button_pattern.match(lower.strip(" \t\n\r:->»«")):
+            # Discard standalone pagination/navigation buttons (e.g. "Next Page", "Continue Reading →", "Page 2", "Next Part")
+            cleaned_lower = re.sub(r"[\s\:\-\–\—\>\<\»\«\→\➔\➜\⟶\►\\]+", " ", lower).strip()
+            if len(txt) < 40 and nav_button_pattern.match(cleaned_lower):
                 continue
 
             # Discard obvious advertising or author signatures
@@ -664,6 +665,7 @@ class StoryScraper:
             max_parts = 250
             known_total_pages = 0
             has_query_parts_links = False
+            is_known_multipage = bool(re.search(r"/\d+/?$", parsed.path))
 
             while current_part <= max_parts:
                 if cancel_event and cancel_event.is_set():
@@ -671,7 +673,7 @@ class StoryScraper:
                     break
 
                 if current_part == 1:
-                    target_url = url
+                    target_url = base_clean if re.search(r"/\d+/?$", parsed.path) else url
                 else:
                     if has_query_parts_links:
                         target_url = f"{base_clean}?part={current_part}"
@@ -699,27 +701,39 @@ class StoryScraper:
 
                 # On page 1, inspect pagination links to see if site is multi-page
                 if current_part == 1:
-                    page_links = soup.select(".post-page-numbers, .page-numbers, .page-links a, .page-links span, .pagination a")
+                    page_links = soup.select(".post-page-numbers, .page-numbers, .page-links a, .page-links span, .pagination a, a.post-page-numbers")
                     found_nums = []
+                    has_post_page_numbers = False
                     for link in page_links:
                         txt = link.get_text(strip=True)
                         if txt.isdigit():
                             found_nums.append(int(txt))
                         href = link.get("href", "")
-                        if "part=" in href:
+                        if "part=" in href or "page=" in href:
                             has_query_parts_links = True
+                        if "post-page-numbers" in str(link.get("class", [])) or "page-links" in str(link.get("class", [])) or "/2" in href:
+                            has_post_page_numbers = True
 
-                    # Also check for ?part= links in body
+                    # Also check for ?part= links or /2/ links in body
                     if not has_query_parts_links:
                         for a in soup.find_all("a", href=True):
-                            if "part=2" in a["href"]:
+                            href = a["href"]
+                            if "part=2" in href:
                                 has_query_parts_links = True
                                 break
+                            if href.startswith(base_clean) and (href.endswith("/2/") or href.endswith("/2")):
+                                has_post_page_numbers = True
 
                     if found_nums:
                         known_total_pages = max(found_nums)
 
-                    is_known_multipage = "america-focus.com" in domain or found_nums or has_query_parts_links
+                    is_known_multipage = (
+                        "america-focus.com" in domain
+                        or "laptopsvilla.com" in domain
+                        or bool(found_nums)
+                        or has_query_parts_links
+                        or has_post_page_numbers
+                    )
 
                 title, paras = self.extract_from_soup(soup)
                 if not story_title and title:

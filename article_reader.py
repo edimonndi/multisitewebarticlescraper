@@ -673,7 +673,7 @@ class StoryScraperApp(ctk.CTk):
 
         self.url_entry = ctk.CTkEntry(
             input_row,
-            placeholder_text="Enter story URL (e.g. america-focus.com, feji.io, fanstopis.com, levanews.com, kaylestore.net, leadtohappiness.com, 1millionstories.net)...",
+            placeholder_text="Enter story URL (e.g. laptopsvilla.com, america-focus.com, feji.io, fanstopis.com, levanews.com, kaylestore.net)...",
             height=38,
             font=ctk.CTkFont(size=13),
             corner_radius=8,
@@ -709,8 +709,9 @@ class StoryScraperApp(ctk.CTk):
         )
         clear_btn.pack(side="left")
 
+        # Row 2: Secondary Controls (Presets, Proxy, Status)
         row2 = ctk.CTkFrame(card, fg_color="transparent")
-        row2.pack(fill="x", padx=16, pady=(0, 12))
+        row2.pack(fill="x", padx=16, pady=(0, 14))
 
         self.fetch_btn = ctk.CTkButton(
             row2,
@@ -740,7 +741,7 @@ class StoryScraperApp(ctk.CTk):
 
         preset_label = ctk.CTkLabel(
             row2,
-            text="Quick Examples:",
+            text="Presets:",
             font=ctk.CTkFont(size=12, weight="bold"),
             text_color=("#64748b", "#94a3b8")
         )
@@ -750,6 +751,7 @@ class StoryScraperApp(ctk.CTk):
             row2,
             values=[
                 "Select a sample URL...",
+                "LaptopsVilla (2 Parts)",
                 "America Focus (97 Parts)",
                 "Feji Stories (9 Parts)",
                 "Fanstopis (3 Parts)",
@@ -1079,6 +1081,7 @@ class StoryScraperApp(ctk.CTk):
 
     def _load_preset_url(self, choice: str):
         presets = {
+            "LaptopsVilla (2 Parts)": "https://laptopsvilla.com/25-instances-where-the-simpsons-anticipated-the-future/",
             "America Focus (97 Parts)": "https://america-focus.com/a-battered-suitcase-on-my-kitchen-floor-ended-my-twenty-three-year-marriage/",
             "Feji Stories (9 Parts)": "https://humanhearttales.feji.io/full-story-she-stole-my-wedding-dress-then-the-security-footage-started-playing/",
             "Fanstopis (3 Parts)": "https://fanstopis.com/my-wife-was-about-to-be-burie",
